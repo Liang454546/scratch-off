@@ -6,69 +6,53 @@
     <title>台灣發大財刮刮樂模擬器</title>
     <meta name="description" content="擬真台灣刮刮樂模擬器，體驗中大獎的快感！">
     
-    <!-- 引入 Tailwind CSS (樣式) -->
+    <!-- 1. 引入 Tailwind CSS (樣式) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 引入 React 和 ReactDOM (核心框架) -->
+    <!-- 2. 引入 React 和 ReactDOM (核心框架) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- 引入 Babel (讓瀏覽器看不懂的 JSX 轉成看得懂的 JS) -->
+    <!-- 3. 引入 Babel (讓瀏覽器能看懂 JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 設定字型 -->
+    <!-- 4. 設定字型 -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
 
     <style>
         body {
             font-family: 'Noto Sans TC', sans-serif;
-            touch-action: manipulation; /* 優化手機觸控體驗，防止雙擊縮放 */
+            touch-action: manipulation; /* 優化手機觸控 */
             -webkit-tap-highlight-color: transparent;
         }
         
-        /* 自定義動畫 Keyframes */
-        @keyframes fade-in {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        @keyframes slide-up {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulse-slow {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-        @keyframes confetti {
-            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-        }
+        /* 動畫設定 */
+        @keyframes fade-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-slow { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes confetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
         
-        /* Tailwind 無法直接處理的複雜動畫類別 */
         .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
         .animate-slide-up { animation: slide-up 0.4s ease-out forwards; }
         .animate-pulse-slow { animation: pulse-slow 3s infinite; }
         .animate-confetti { animation: confetti linear forwards; }
 
-        /* 隱藏滾動條但保留功能 (美觀用) */
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+        /* 隱藏滾動條 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-stone-950 text-white selection:bg-yellow-500 selection:text-black">
-    <!-- React 應用程式掛載點 -->
+    
+    <!-- React 應用程式會顯示在這裡 -->
     <div id="root"></div>
 
-    <!-- React 程式碼邏輯 -->
+    <!-- 這裡開始是 React 程式碼邏輯 -->
     <script type="text/babel">
+        // 從全域 React 物件取得 Hook
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // --- 1. 圖示元件區 (手動定義 SVG，取代外部套件依賴) ---
+        // --- 1. 圖示元件區 (手動定義 SVG，解決 import 錯誤) ---
         const IconBase = ({ children, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
@@ -95,7 +79,7 @@
             }).format(amount);
         };
 
-        // 音效系統 (Web Audio API)
+        // 音效系統
         const playSound = (type) => {
             if (typeof window === 'undefined') return;
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -109,13 +93,10 @@
             gain.connect(ctx.destination);
 
             if (type === 'scratch') {
-                // 刮擦聲：使用白噪音
                 const bufferSize = ctx.sampleRate * 0.1;
                 const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
                 const data = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) {
-                    data[i] = Math.random() * 2 - 1;
-                }
+                for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
                 const noise = ctx.createBufferSource();
                 noise.buffer = buffer;
                 const noiseGain = ctx.createGain();
@@ -128,7 +109,6 @@
             }
 
             if (type === 'win') {
-                // 中獎聲：激昂的琶音
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(523.25, ctx.currentTime);
                 osc.frequency.linearRampToValueAtTime(659.25, ctx.currentTime + 0.1);
@@ -141,7 +121,6 @@
             }
             
             if (type === 'select') {
-                // 選擇聲
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(440, ctx.currentTime);
                 gain.gain.setValueAtTime(0.05, ctx.currentTime);
@@ -166,7 +145,6 @@
                 winType: 'normal',
             };
 
-            // 中獎率設定：越貴的票，回本率設定高一點 (50%)
             let winChance = 0.35; 
             if (cost >= 2000) winChance = 0.50;
 
@@ -178,7 +156,6 @@
             let hasBonus = false;
             let hasInstantWinSymbol = false;
 
-            // 彩券參數設定
             if (cost === 100) {
                 ticket.theme = { name: '好運旺旺來', bg: 'from-red-500 to-orange-500', border: 'border-yellow-200', text: 'text-white' };
                 ticket.maxPrize = 300000;
@@ -214,12 +191,10 @@
                 hasInstantWinSymbol = true;
             }
 
-            // 產生幸運號碼
             const pool = Array.from({ length: 60 }, (_, i) => i + 1);
             const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
             ticket.luckyNumbers = shuffledPool.slice(0, luckyCount);
 
-            // 產生 Bonus 區 (僅 $5000)
             let bonusWin = 0;
             if (hasBonus) {
                 const isBonusWin = isWinner && Math.random() < 0.3;
@@ -241,7 +216,6 @@
                 winningSpotsCount = randomInt(1, Math.min(maxSpots, myCount));
             }
 
-            // 填入每個刮區
             for (let i = 0; i < myCount; i++) {
                 let num, prize, isMatch = false, isInstantWin = false;
                 let symbol = null;
@@ -250,7 +224,7 @@
 
                 if (isThisSpotWinner) {
                     prize = possiblePrizes[randomInt(0, possiblePrizes.length - 1)];
-                    if (Math.random() < 0.0001) prize = ticket.maxPrize; // 萬分之一機率中頭獎
+                    if (Math.random() < 0.0001) prize = ticket.maxPrize;
 
                     if (hasInstantWinSymbol && Math.random() < 0.2) {
                         isInstantWin = true;
@@ -288,7 +262,7 @@
             return ticket;
         };
 
-        // --- 4. 元件: 刮刮區 (使用 Canvas) ---
+        // --- 4. 元件: 刮刮區 (Canvas) ---
         const ScratchSpot = ({ width, height, children, onReveal, isRevealedForce, soundEnabled }) => {
             const canvasRef = useRef(null);
             const [isScratched, setIsScratched] = useState(false);
@@ -306,7 +280,6 @@
                 canvas.height = height * dpr;
                 context.scale(dpr, dpr);
 
-                // 繪製銀漆
                 const gradient = context.createLinearGradient(0, 0, width, height);
                 gradient.addColorStop(0, '#d1d5db');
                 gradient.addColorStop(0.5, '#9ca3af');
@@ -345,7 +318,6 @@
             const handleScratch = (e) => {
                 if (isScratched || !ctx) return;
 
-                // 音效節流
                 const now = Date.now();
                 if (soundEnabled && now - lastPlayTime.current > 100) {
                     playSound('scratch');

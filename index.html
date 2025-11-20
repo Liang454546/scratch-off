@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>台灣發大財刮刮樂模擬器</title>
-    <meta name="description" content="擬真台灣刮刮樂模擬器，體驗中大獎的快感！">
+    <title>台灣發大財刮刮樂模擬器 (真實機率版)</title>
+    <meta name="description" content="擬真台灣刮刮樂模擬器，體驗真實機率的殘酷與中大獎的快感！">
     
     <!-- 1. 引入 Tailwind CSS (樣式) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -31,11 +31,16 @@
         @keyframes slide-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse-slow { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
         @keyframes confetti { 0% { transform: translateY(0) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+        @keyframes float-up-fade { 
+            0% { opacity: 1; transform: translateY(0) scale(1); } 
+            100% { opacity: 0; transform: translateY(-30px) scale(1.2); } 
+        }
         
         .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
         .animate-slide-up { animation: slide-up 0.4s ease-out forwards; }
         .animate-pulse-slow { animation: pulse-slow 3s infinite; }
         .animate-confetti { animation: confetti linear forwards; }
+        .animate-float-up { animation: float-up-fade 0.8s ease-out forwards; }
 
         /* 隱藏滾動條 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -52,7 +57,7 @@
         // 從全域 React 物件取得 Hook
         const { useState, useEffect, useRef, useCallback } = React;
 
-        // --- 1. 圖示元件區 (手動定義 SVG，解決 import 錯誤) ---
+        // --- 1. 圖示元件區 ---
         const IconBase = ({ children, size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
         );
@@ -77,6 +82,20 @@
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0,
             }).format(amount);
+        };
+
+        // 加權隨機抽樣 (實現真實機率的核心)
+        const getWeightedRandom = (items) => {
+            const totalWeight = items.reduce((acc, item) => acc + item.weight, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (const item of items) {
+                random -= item.weight;
+                if (random <= 0) {
+                    return item.val;
+                }
+            }
+            return items[0].val; 
         };
 
         // 音效系統
@@ -128,9 +147,20 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.1);
             }
+            
+            if (type === 'coin') {
+                // 金幣聲 (儲值用)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1000, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1500, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+            }
         };
 
-        // --- 3. 核心邏輯區 (產生彩券數據) ---
+        // --- 3. 核心邏輯區 (真實機率版) ---
         const generateTicketData = (cost) => {
             let ticket = {
                 id: Date.now(),
@@ -145,119 +175,151 @@
                 winType: 'normal',
             };
 
-            let winChance = 0.35; 
-            if (cost >= 2000) winChance = 0.50;
-
-            const isWinner = Math.random() < winChance;
+            // 定義真實世界的獎金結構
+            let payoutTable = [];
             
-            let possiblePrizes = [];
-            let luckyCount = 0;
-            let myCount = 0;
-            let hasBonus = false;
-            let hasInstantWinSymbol = false;
-
+            // $100 彩券
             if (cost === 100) {
                 ticket.theme = { name: '好運旺旺來', bg: 'from-red-500 to-orange-500', border: 'border-yellow-200', text: 'text-white' };
                 ticket.maxPrize = 300000;
-                possiblePrizes = [100, 100, 200, 300, 500, 1000];
-                luckyCount = 1;
-                myCount = 5;
-            } else if (cost === 200) {
+                payoutTable = [
+                    { val: 0, weight: 7200 }, { val: 100, weight: 2000 }, { val: 200, weight: 600 },
+                    { val: 300, weight: 150 }, { val: 500, weight: 45 }, { val: 1000, weight: 4 },
+                    { val: 300000, weight: 1 }
+                ];
+                ticket.luckyCount = 1; ticket.myCount = 5;
+            } 
+            // $200 彩券
+            else if (cost === 200) {
                 ticket.theme = { name: '發大財', bg: 'from-red-700 to-red-900', border: 'border-yellow-400', text: 'text-yellow-100' };
                 ticket.maxPrize = 2000000;
-                possiblePrizes = [200, 200, 400, 500, 1000, 2000, 5000];
-                luckyCount = 2;
-                myCount = 10;
-            } else if (cost === 500) {
+                payoutTable = [
+                    { val: 0, weight: 6800 }, { val: 200, weight: 2200 }, { val: 300, weight: 200 },
+                    { val: 500, weight: 500 }, { val: 1000, weight: 200 }, { val: 2000, weight: 80 },
+                    { val: 5000, weight: 19 }, { val: 2000000, weight: 1 }
+                ];
+                ticket.luckyCount = 2; ticket.myCount = 10;
+            } 
+            // $500 彩券
+            else if (cost === 500) {
                 ticket.theme = { name: '五路財神', bg: 'from-yellow-600 to-yellow-800', border: 'border-red-500', text: 'text-white' };
                 ticket.maxPrize = 5000000;
-                possiblePrizes = [500, 500, 1000, 1500, 2000, 5000, 10000];
-                luckyCount = 3;
-                myCount = 15;
-            } else if (cost === 2000) {
+                payoutTable = [
+                    { val: 0, weight: 6000 }, { val: 500, weight: 2500 }, { val: 600, weight: 500 },
+                    { val: 1000, weight: 700 }, { val: 1500, weight: 200 }, { val: 5000, weight: 90 },
+                    { val: 50000, weight: 9 }, { val: 5000000, weight: 1 }
+                ];
+                ticket.luckyCount = 3; ticket.myCount = 15;
+            } 
+            // $2000 彩券
+            else if (cost === 2000) {
                 ticket.theme = { name: '2000萬超級紅包', bg: 'from-purple-900 via-red-900 to-yellow-900', border: 'border-yellow-300', text: 'text-yellow-200' };
                 ticket.maxPrize = 20000000;
-                possiblePrizes = [1000, 2000, 2000, 5000, 10000, 100000, 1000000];
-                luckyCount = 5;
-                myCount = 25;
-                hasInstantWinSymbol = true;
-            } else if (cost === 5000) {
+                payoutTable = [
+                    { val: 0, weight: 3100 }, { val: 1000, weight: 4000 }, { val: 2000, weight: 2000 },
+                    { val: 5000, weight: 800 }, { val: 10000, weight: 90 }, { val: 100000, weight: 9 },
+                    { val: 1000000, weight: 1 }, { val: 20000000, weight: 0.1 }
+                ];
+                ticket.luckyCount = 5; ticket.myCount = 25; ticket.hasInstantWinSymbol = true;
+            } 
+            // $5000 彩券
+            else if (cost === 5000) {
                 ticket.theme = { name: '財富自由', bg: 'from-slate-900 via-slate-800 to-yellow-600', border: 'border-white', text: 'text-yellow-400' };
                 ticket.maxPrize = 50000000;
-                possiblePrizes = [5000, 5000, 10000, 20000, 50000, 1000000];
-                luckyCount = 6;
-                myCount = 30;
-                hasBonus = true;
-                hasInstantWinSymbol = true;
+                payoutTable = [
+                    { val: 0, weight: 5000 }, { val: 5000, weight: 3000 }, { val: 10000, weight: 1500 },
+                    { val: 20000, weight: 400 }, { val: 50000, weight: 90 }, { val: 1000000, weight: 9 },
+                    { val: 50000000, weight: 1 }
+                ];
+                ticket.luckyCount = 6; ticket.myCount = 30; ticket.hasBonus = true; ticket.hasInstantWinSymbol = true;
             }
+
+            let totalWin = getWeightedRandom(payoutTable);
+            ticket.wonAmount = totalWin;
+            ticket.isWin = totalWin > 0;
 
             const pool = Array.from({ length: 60 }, (_, i) => i + 1);
             const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
-            ticket.luckyNumbers = shuffledPool.slice(0, luckyCount);
+            ticket.luckyNumbers = shuffledPool.slice(0, ticket.luckyCount || 3);
 
+            let remainingWin = totalWin;
             let bonusWin = 0;
-            if (hasBonus) {
-                const isBonusWin = isWinner && Math.random() < 0.3;
-                const bonusAmount = isBonusWin ? possiblePrizes[randomInt(0, possiblePrizes.length-1)] : 0;
-                bonusWin = bonusAmount;
+
+            if (ticket.hasBonus && remainingWin > 0 && Math.random() < 0.3) {
+                if (remainingWin >= 5000) {
+                    bonusWin = 5000;
+                    remainingWin -= 5000;
+                }
+            }
+            
+            if (ticket.hasBonus) {
                 ticket.bonusArea = {
-                    amount: bonusAmount,
-                    text: isBonusWin ? formatMoney(bonusAmount) : "銘謝惠顧",
-                    isWin: isBonusWin
+                    amount: bonusWin,
+                    text: bonusWin > 0 ? formatMoney(bonusWin) : "銘謝惠顧",
+                    isWin: bonusWin > 0
                 };
             }
 
-            let remainingNumbers = shuffledPool.slice(luckyCount);
-            let totalWin = bonusWin;
             let winningSpotsCount = 0;
-
-            if (isWinner) {
-                const maxSpots = cost >= 2000 ? 8 : 3;
-                winningSpotsCount = randomInt(1, Math.min(maxSpots, myCount));
+            if (remainingWin > 0) {
+                if (remainingWin <= cost) winningSpotsCount = 1;
+                else winningSpotsCount = randomInt(1, Math.min(5, ticket.myCount));
             }
 
-            for (let i = 0; i < myCount; i++) {
-                let num, prize, isMatch = false, isInstantWin = false;
-                let symbol = null;
+            let spots = [];
+            for (let i = 0; i < winningSpotsCount; i++) {
+                let spotWin = 0;
+                if (i === winningSpotsCount - 1) {
+                    spotWin = remainingWin;
+                } else {
+                    let slice = Math.floor(remainingWin / (winningSpotsCount - i));
+                    slice = Math.floor(slice / 100) * 100; 
+                    if (slice <= 0) slice = 0;
+                    spotWin = slice;
+                    remainingWin -= slice;
+                }
+                spots.push({ isWin: true, prize: spotWin });
+            }
 
-                const isThisSpotWinner = i < winningSpotsCount;
+            const losingSpotsCount = ticket.myCount - winningSpotsCount;
+            for (let i = 0; i < losingSpotsCount; i++) {
+                let fakePrize = payoutTable[randomInt(1, payoutTable.length - 1)].val;
+                spots.push({ isWin: false, prize: fakePrize });
+            }
 
-                if (isThisSpotWinner) {
-                    prize = possiblePrizes[randomInt(0, possiblePrizes.length - 1)];
-                    if (Math.random() < 0.0001) prize = ticket.maxPrize;
+            spots.sort(() => 0.5 - Math.random());
 
-                    if (hasInstantWinSymbol && Math.random() < 0.2) {
-                        isInstantWin = true;
-                        symbol = '💰';
-                        num = 0;
+            let remainingNumbers = shuffledPool.slice(ticket.luckyCount);
+            
+            ticket.myNumbers = spots.map((spot, idx) => {
+                let num, isMatch = false, isInstantWin = false, symbol = null;
+                
+                if (spot.isWin) {
+                    if (ticket.hasInstantWinSymbol && Math.random() < 0.15) {
+                        isInstantWin = true; symbol = '💰'; num = 0;
                     } else {
-                        num = ticket.luckyNumbers[randomInt(0, luckyCount - 1)];
+                        num = ticket.luckyNumbers[randomInt(0, ticket.luckyCount - 1)];
                         isMatch = true;
                     }
-                    totalWin += prize;
                 } else {
                     const randIdx = randomInt(0, remainingNumbers.length - 1);
                     num = remainingNumbers[randIdx];
                     remainingNumbers.splice(randIdx, 1);
-                    prize = possiblePrizes[randomInt(0, possiblePrizes.length - 1)];
                 }
 
-                ticket.myNumbers.push({
-                    id: `spot-${i}`,
+                return {
+                    id: `spot-${idx}`,
                     val: num,
-                    prize: prize,
+                    prize: spot.prize,
                     isMatch: isMatch,
                     isInstantWin: isInstantWin,
                     symbol: symbol
-                });
-            }
-
-            ticket.myNumbers.sort(() => 0.5 - Math.random());
-            ticket.wonAmount = totalWin;
-            ticket.isWin = totalWin > 0;
+                };
+            });
             
-            if (totalWin >= ticket.cost * 10) ticket.winType = 'super';
-            else if (totalWin > ticket.cost) ticket.winType = 'big';
+            if (totalWin >= cost * 5) ticket.winType = 'super';
+            else if (totalWin > cost) ticket.winType = 'big';
+            else if (totalWin > 0) ticket.winType = 'normal';
 
             return ticket;
         };
@@ -281,19 +343,24 @@
                 context.scale(dpr, dpr);
 
                 const gradient = context.createLinearGradient(0, 0, width, height);
-                gradient.addColorStop(0, '#d1d5db');
+                gradient.addColorStop(0, '#e5e7eb');
                 gradient.addColorStop(0.5, '#9ca3af');
-                gradient.addColorStop(1, '#d1d5db');
+                gradient.addColorStop(1, '#e5e7eb');
                 context.fillStyle = gradient;
                 context.fillRect(0, 0, width, height);
+                
+                for (let i = 0; i < 50; i++) {
+                    context.fillStyle = `rgba(255,255,255,${Math.random() * 0.5})`;
+                    context.fillRect(Math.random() * width, Math.random() * height, 2, 2);
+                }
 
                 context.fillStyle = '#6b7280'; 
-                context.font = 'bold 12px Arial';
+                context.font = 'bold 10px Arial';
                 context.textAlign = 'center';
                 context.textBaseline = 'middle';
                 
-                const texts = ["$", "刮", "TW", "WIN"];
-                for(let i=0; i<4; i++) {
+                const texts = ["$", "刮", "TW", "WIN", "LUCKY"];
+                for(let i=0; i<3; i++) {
                     context.save();
                     context.translate(Math.random() * width, Math.random() * height);
                     context.rotate((Math.random() - 0.5));
@@ -319,7 +386,7 @@
                 if (isScratched || !ctx) return;
 
                 const now = Date.now();
-                if (soundEnabled && now - lastPlayTime.current > 100) {
+                if (soundEnabled && now - lastPlayTime.current > 80) {
                     playSound('scratch');
                     lastPlayTime.current = now;
                 }
@@ -341,7 +408,7 @@
                 const y = clientY - rect.top;
 
                 ctx.beginPath();
-                ctx.arc(x, y, 16, 0, Math.PI * 2);
+                ctx.arc(x, y, 18, 0, Math.PI * 2);
                 ctx.fill();
 
                 checkRevealPercentage();
@@ -353,7 +420,7 @@
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
                 let transparentPixels = 0;
-                const sampleRate = 20; 
+                const sampleRate = 40; 
                 
                 for (let i = 0; i < data.length; i += 4 * sampleRate) {
                     if (data[i + 3] < 128) transparentPixels++;
@@ -432,16 +499,25 @@
 
         // --- 6. 主程式 ---
         const TaiwanScratchLottery = () => {
-            const [balance, setBalance] = useState(5000); 
+            const [balance, setBalance] = useState(50000); // 初始金額 50000
             const [currentTicket, setCurrentTicket] = useState(null);
             const [revealedCount, setRevealedCount] = useState(0);
             const [showResult, setShowResult] = useState(false);
             const [forceRevealAll, setForceRevealAll] = useState(false);
             const [soundEnabled, setSoundEnabled] = useState(true);
+            const [showTopUpAnim, setShowTopUpAnim] = useState(false); // 儲值動畫狀態
+
+            // 領錢功能
+            const handleTopUp = () => {
+                playSound('coin');
+                setBalance(prev => prev + 10000);
+                setShowTopUpAnim(true);
+                setTimeout(() => setShowTopUpAnim(false), 1000);
+            };
 
             const buyTicket = (cost) => {
                 if (balance < cost) {
-                    alert("錢包餘額不足！快去儲值當大爺！");
+                    alert("錢包餘額不足！請按右上角領錢！");
                     return;
                 }
                 playSound('select');
@@ -487,6 +563,9 @@
                 setShowResult(false);
             };
 
+            // 計算淨利 (用於結算畫面)
+            const netProfit = currentTicket ? currentTicket.wonAmount - currentTicket.cost : 0;
+
             return (
                 <div className="min-h-screen bg-stone-950 text-white font-sans pb-12">
                     {/* Header */}
@@ -498,7 +577,7 @@
                                 </div>
                                 <div>
                                     <h1 className="font-black text-lg leading-none text-yellow-400 tracking-wider italic drop-shadow-md">台灣發大財</h1>
-                                    <span className="text-[10px] text-red-200 font-medium tracking-widest">TAIWAN LOTTERY</span>
+                                    <span className="text-[10px] text-red-200 font-medium tracking-widest">真實機率版</span>
                                 </div>
                             </div>
                             
@@ -506,12 +585,18 @@
                                 <button onClick={() => setSoundEnabled(!soundEnabled)} className="text-red-200 hover:text-white">
                                     {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
                                 </button>
-                                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-yellow-500/50 backdrop-blur-sm">
+                                <div className="relative flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-yellow-500/50 backdrop-blur-sm">
                                     <Wallet size={16} className="text-yellow-400" />
-                                    <span className="font-mono font-bold text-yellow-400 text-lg">{formatMoney(balance)}</span>
-                                    <button onClick={() => setBalance(b => b + 5000)} className="bg-green-600 hover:bg-green-500 text-[10px] px-1.5 py-0.5 rounded text-white ml-1 font-bold">
-                                    +儲值
+                                    <span className={`font-mono font-bold text-lg ${balance < 500 ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>{formatMoney(balance)}</span>
+                                    <button onClick={handleTopUp} className="bg-green-600 hover:bg-green-500 text-[10px] px-2 py-1 rounded text-white ml-1 font-bold active:scale-95 transition">
+                                    +領錢
                                     </button>
+                                    {/* 領錢動畫 */}
+                                    {showTopUpAnim && (
+                                        <div className="absolute -bottom-8 right-0 text-green-400 font-black text-sm animate-float-up whitespace-nowrap pointer-events-none drop-shadow-md">
+                                            +$10,000
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -522,7 +607,7 @@
                             <div className="space-y-8 animate-fade-in">
                                 <div className="text-center space-y-2 py-4">
                                     <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 filter drop-shadow-sm">選擇您的刮刮樂</h2>
-                                    <p className="text-gray-400 text-sm">今天想玩多大？越貴越刺激！</p>
+                                    <p className="text-gray-400 text-sm">初始資金五萬！挑戰真實機率！</p>
                                 </div>
 
                                 <div className="grid gap-5">
@@ -538,7 +623,7 @@
                                             textColor="text-yellow-100"
                                             badge="旗艦"
                                             onBuy={buyTicket} balance={balance}
-                                            desc="全新玩法！含 Bonus 區，最高獎金！"
+                                            desc="高風險！50% 機率全賠，贏了直接退休！"
                                         />
                                         <TicketOption 
                                             price={2000} name="2000萬超級紅包" maxPrize="2,000萬" 
@@ -547,7 +632,7 @@
                                             textColor="text-white"
                                             badge="熱銷"
                                             onBuy={buyTicket} balance={balance}
-                                            desc="中獎率高達 50%！特殊符號直接中！"
+                                            desc="中獎率 69% (但包含賠錢中獎)，過年必玩！"
                                         />
                                     </div>
 
@@ -712,7 +797,11 @@
                                                     <h2 className="text-3xl font-black text-red-600 tracking-wider">
                                                         {currentTicket.winType === 'super' ? '超級大獎！' : '恭喜中獎'}
                                                     </h2>
-                                                    <p className="text-stone-500 font-medium text-sm mt-1">運氣來了擋都擋不住！</p>
+                                                    <p className="text-stone-500 font-medium text-sm mt-1">
+                                                        {netProfit < 0 
+                                                            ? `雖然中了，但還是虧了 $${Math.abs(netProfit)}...` 
+                                                            : `太神啦！淨賺 $${netProfit}！`}
+                                                    </p>
                                                 </div>
                                                 
                                                 <div className="bg-gradient-to-r from-red-500 to-red-600 py-5 rounded-2xl text-white shadow-inner ring-4 ring-red-100">
@@ -725,8 +814,8 @@
                                                 <div className="text-stone-300">
                                                     <RefreshCw size={60} className="mx-auto" />
                                                 </div>
-                                                <h2 className="text-2xl font-bold text-stone-600">下次一定中</h2>
-                                                <p className="text-stone-400 text-sm">做公益 積功德，福氣在後頭！</p>
+                                                <h2 className="text-2xl font-bold text-stone-600">銘謝惠顧</h2>
+                                                <p className="text-stone-400 text-sm">做公益 積功德，下次一定中！</p>
                                                 <div className="bg-stone-100 py-4 rounded-xl">
                                                     <p className="text-stone-500 font-mono">-$ {currentTicket.cost}</p>
                                                 </div>
